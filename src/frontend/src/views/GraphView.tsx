@@ -166,7 +166,7 @@ function fitNodesToView(
   const k = Math.min(
     (W - padding * 2) / graphW,
     (H - padding * 2) / graphH,
-    1.2, // don't zoom in beyond 1.2x
+    0.55, // don't zoom in beyond 0.55x — keeps full graph visible
   );
   const x = W / 2 - ((minX + maxX) / 2) * k;
   const y = H / 2 - ((minY + maxY) / 2) * k;
@@ -231,7 +231,7 @@ export function GraphView({ onSelectItem }: Props) {
   const hoveredIdRef = useRef<string | null>(null);
   const nodesRef = useRef<GraphNode[]>([]);
   const linksRef = useRef<GraphLink[]>([]);
-  const transformRef = useRef({ x: 0, y: 0, k: 1 });
+  const transformRef = useRef({ x: 0, y: 0, k: 0.6 });
   const sizeRef = useRef({ W: 0, H: 0 });
   const frameRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -239,7 +239,11 @@ export function GraphView({ onSelectItem }: Props) {
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const dragNodeRef = useRef<GraphNode | null>(null);
-  const hasFitRef = useRef(false); // track if we've auto-fit yet
+  const hasFitRef = useRef(false);
+
+  // Touch pan state
+  const touchStartRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
+  const isTouchPanRef = useRef(false);
 
   // Keep geometry ref in sync
   useEffect(() => {
@@ -334,14 +338,14 @@ export function GraphView({ onSelectItem }: Props) {
         const { W, H } = sizeRef.current;
         if (W > 0 && H > 0) {
           const shouldSimulate =
-            frameRef.current < 350 || dragNodeRef.current !== null;
+            frameRef.current < 220 || dragNodeRef.current !== null;
           if (shouldSimulate) {
             tickSimulation(nodesRef.current, linksRef.current, W, H);
             frameRef.current++;
 
-            // Auto-fit once after simulation settles (around frame 300)
+            // Auto-fit once after simulation settles (around frame 120)
             if (
-              frameRef.current === 300 &&
+              frameRef.current === 120 &&
               !hasFitRef.current &&
               geometryRef.current === "standard"
             ) {
@@ -387,8 +391,8 @@ export function GraphView({ onSelectItem }: Props) {
         hasFitRef.current = false;
       }
 
-      // Center transform
-      transformRef.current = { x: 0, y: 0, k: 1 };
+      // Start zoomed out
+      transformRef.current = { x: 0, y: 0, k: 0.6 };
 
       if (!stopLoop) {
         stopLoop = startLoop(ctx!, canvas!);
@@ -411,7 +415,7 @@ export function GraphView({ onSelectItem }: Props) {
     });
     ro.observe(container);
 
-    // Event handlers
+    // ── Mouse event handlers ──────────────────────────────────────────────────
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 0.9;
@@ -419,7 +423,7 @@ export function GraphView({ onSelectItem }: Props) {
         0.2,
         Math.min(5, transformRef.current.k * factor),
       );
-      frameRef.current = Math.min(frameRef.current, 350); // keep drawing
+      frameRef.current = Math.min(frameRef.current, 220);
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -453,7 +457,7 @@ export function GraphView({ onSelectItem }: Props) {
           dragStartRef.current.tx + (e.clientX - dragStartRef.current.x);
         transformRef.current.y =
           dragStartRef.current.ty + (e.clientY - dragStartRef.current.y);
-        frameRef.current = Math.min(frameRef.current, 350);
+        frameRef.current = Math.min(frameRef.current, 220);
         return;
       }
       const { mx, my } = getWorldPos(e, canvas!);
@@ -462,7 +466,7 @@ export function GraphView({ onSelectItem }: Props) {
       if (newId !== hoveredIdRef.current) {
         hoveredIdRef.current = newId;
         canvas!.style.cursor = hovered ? "pointer" : "default";
-        frameRef.current = Math.min(frameRef.current, 350);
+        frameRef.current = Math.min(frameRef.current, 220);
       }
     };
 
@@ -505,11 +509,43 @@ export function GraphView({ onSelectItem }: Props) {
       dragNodeRef.current = null;
     };
 
+    // ── Touch event handlers (canvas pan only) ────────────────────────────────
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      isTouchPanRef.current = true;
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        tx: transformRef.current.x,
+        ty: transformRef.current.y,
+      };
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isTouchPanRef.current || e.touches.length !== 1) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      transformRef.current.x =
+        touchStartRef.current.tx + (touch.clientX - touchStartRef.current.x);
+      transformRef.current.y =
+        touchStartRef.current.ty + (touch.clientY - touchStartRef.current.y);
+      frameRef.current = Math.min(frameRef.current, 220);
+    };
+
+    const onTouchEnd = () => {
+      isTouchPanRef.current = false;
+    };
+
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("mousedown", onMouseDown);
     canvas.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("mouseup", onMouseUp);
     canvas.addEventListener("mouseleave", onMouseLeave);
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd);
 
     return () => {
       ro.disconnect();
@@ -521,6 +557,9 @@ export function GraphView({ onSelectItem }: Props) {
       canvas.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("mouseup", onMouseUp);
       canvas.removeEventListener("mouseleave", onMouseLeave);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
     };
   }, [getWorldPos, findNode, onSelectItem, startLoop]);
 
@@ -529,8 +568,7 @@ export function GraphView({ onSelectItem }: Props) {
     const { W, H } = sizeRef.current;
     if (nodesRef.current.length === 0) return;
     applyGeometry(nodesRef.current, geometry, W / 2, H / 2);
-    frameRef.current = 0; // restart simulation ticks so geometry gets drawn
-    // For non-standard layouts, fit to view immediately after applying
+    frameRef.current = 0;
     if (geometry !== "standard") {
       setTimeout(() => {
         transformRef.current = fitNodesToView(nodesRef.current, W, H);
@@ -691,7 +729,8 @@ export function GraphView({ onSelectItem }: Props) {
             fontFamily: "'Space Mono', monospace",
           }}
         >
-          Scroll to zoom · Drag to pan · Click node to view
+          Scroll to zoom · Drag canvas to pan · Drag nodes to move · Click to
+          view
         </div>
       </div>
     </div>
