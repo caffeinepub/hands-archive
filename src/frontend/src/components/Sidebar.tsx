@@ -120,6 +120,33 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
         );
       })}
       <div style={{ flex: 1 }} />
+      {/* Main site link */}
+      <a
+        href="https://hands-band-archive-ra1.caffeine.xyz/"
+        data-ocid="nav.mainsite.link"
+        style={{
+          display: "block",
+          padding: "10px 24px",
+          fontSize: "12px",
+          fontWeight: 600,
+          textDecoration: "none",
+          color: "#000",
+          borderTop: "1px solid #eee",
+          borderBottom: "1px solid #eee",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          background: "transparent",
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLAnchorElement).style.background = "#f0f0f0";
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLAnchorElement).style.background =
+            "transparent";
+        }}
+      >
+        ← Main Page
+      </a>
       <div
         style={{
           padding: "16px 24px 24px",
@@ -127,7 +154,6 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
           color: "#aaa",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
-          borderTop: "1px solid #eee",
           lineHeight: 1.8,
         }}
       >

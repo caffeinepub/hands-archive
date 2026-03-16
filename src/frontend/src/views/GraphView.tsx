@@ -143,6 +143,36 @@ function tickSimulation(
   }
 }
 
+function fitNodesToView(
+  nodes: GraphNode[],
+  W: number,
+  H: number,
+  padding = 60,
+): { x: number; y: number; k: number } {
+  if (nodes.length === 0) return { x: 0, y: 0, k: 1 };
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const n of nodes) {
+    const r = (NODE_SIZES[n.type] ?? 7) + 14; // node radius + label space
+    minX = Math.min(minX, n.x - r);
+    minY = Math.min(minY, n.y - r);
+    maxX = Math.max(maxX, n.x + r);
+    maxY = Math.max(maxY, n.y + r);
+  }
+  const graphW = maxX - minX || 1;
+  const graphH = maxY - minY || 1;
+  const k = Math.min(
+    (W - padding * 2) / graphW,
+    (H - padding * 2) / graphH,
+    1.2, // don't zoom in beyond 1.2x
+  );
+  const x = W / 2 - ((minX + maxX) / 2) * k;
+  const y = H / 2 - ((minY + maxY) / 2) * k;
+  return { x, y, k };
+}
+
 function applyGeometry(
   nodes: GraphNode[],
   mode: GeometryMode,
@@ -209,6 +239,7 @@ export function GraphView({ onSelectItem }: Props) {
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const dragNodeRef = useRef<GraphNode | null>(null);
+  const hasFitRef = useRef(false); // track if we've auto-fit yet
 
   // Keep geometry ref in sync
   useEffect(() => {
@@ -307,6 +338,16 @@ export function GraphView({ onSelectItem }: Props) {
           if (shouldSimulate) {
             tickSimulation(nodesRef.current, linksRef.current, W, H);
             frameRef.current++;
+
+            // Auto-fit once after simulation settles (around frame 300)
+            if (
+              frameRef.current === 300 &&
+              !hasFitRef.current &&
+              geometryRef.current === "standard"
+            ) {
+              hasFitRef.current = true;
+              transformRef.current = fitNodesToView(nodesRef.current, W, H);
+            }
           }
           draw();
         }
@@ -343,6 +384,7 @@ export function GraphView({ onSelectItem }: Props) {
         nodesRef.current = nodes;
         linksRef.current = links;
         frameRef.current = 0;
+        hasFitRef.current = false;
       }
 
       // Center transform
@@ -482,12 +524,18 @@ export function GraphView({ onSelectItem }: Props) {
     };
   }, [getWorldPos, findNode, onSelectItem, startLoop]);
 
-  // Apply geometry when mode changes
+  // Apply geometry when mode changes and re-fit view
   useEffect(() => {
     const { W, H } = sizeRef.current;
     if (nodesRef.current.length === 0) return;
     applyGeometry(nodesRef.current, geometry, W / 2, H / 2);
     frameRef.current = 0; // restart simulation ticks so geometry gets drawn
+    // For non-standard layouts, fit to view immediately after applying
+    if (geometry !== "standard") {
+      setTimeout(() => {
+        transformRef.current = fitNodesToView(nodesRef.current, W, H);
+      }, 100);
+    }
   }, [geometry]);
 
   const geomOptions: { key: GeometryMode; label: string }[] = [
