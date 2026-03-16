@@ -27,25 +27,33 @@ type Props = {
 
 const NODE_COLORS: Record<string, string> = {
   song: "#000",
-  album: "#555",
-  member: "#888",
+  album: "#333",
+  member: "#777",
   show: "#bbb",
 };
 
-const NODE_RADII: Record<string, number> = {
-  song: 8,
-  album: 14,
-  member: 12,
-  show: 8,
+const NODE_SIZES: Record<string, number> = {
+  song: 7,
+  album: 13,
+  member: 11,
+  show: 7,
 };
 
-function buildGraph(W: number, H: number) {
+function buildGraph(
+  W: number,
+  H: number,
+): { nodes: GraphNode[]; links: GraphLink[] } {
+  const cx = W / 2;
+  const cy = H / 2;
   const nodes: GraphNode[] = ALL_ITEMS.map((item) => ({
     id: item.id,
-    label: item.type === "member" ? (item as any).name : (item as any).title,
+    label:
+      item.type === "member"
+        ? (item as { name: string }).name
+        : (item as { title: string }).title,
     type: item.type,
-    x: W / 2 + (Math.random() - 0.5) * 300,
-    y: H / 2 + (Math.random() - 0.5) * 300,
+    x: cx + (Math.random() - 0.5) * 200,
+    y: cy + (Math.random() - 0.5) * 200,
     vx: 0,
     vy: 0,
     fx: null,
@@ -60,13 +68,11 @@ function buildGraph(W: number, H: number) {
       }
     }
     if (item.type === "member") {
-      const albums = ALL_ITEMS.filter((i) => i.type === "album");
-      for (const album of albums) {
+      for (const album of ALL_ITEMS.filter((i) => i.type === "album")) {
         links.push({ source: item.id, target: album.id });
       }
     }
   }
-
   return { nodes, links };
 }
 
@@ -76,10 +82,10 @@ function tickSimulation(
   W: number,
   H: number,
 ) {
-  const alpha = 0.3;
+  const alpha = 0.25;
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-  // Link forces
+  // Spring forces along links
   for (const link of links) {
     const s = nodeMap.get(link.source);
     const t = nodeMap.get(link.target);
@@ -87,10 +93,10 @@ function tickSimulation(
     const dx = t.x - s.x;
     const dy = t.y - s.y;
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const targetDist = 100;
-    const force = (dist - targetDist) * 0.01 * alpha;
-    const fx = (dx / dist) * force;
-    const fy = (dy / dist) * force;
+    const target = 110;
+    const f = (dist - target) * 0.008 * alpha;
+    const fx = (dx / dist) * f;
+    const fy = (dy / dist) * f;
     if (s.fx === null) {
       s.vx += fx;
       s.vy += fy;
@@ -102,18 +108,20 @@ function tickSimulation(
   }
 
   // Repulsion + centering
+  const cx = W / 2;
+  const cy = H / 2;
   for (const n of nodes) {
     if (n.fx !== null) continue;
-    // Center attraction
-    n.vx += (W / 2 - n.x) * 0.002 * alpha;
-    n.vy += (H / 2 - n.y) * 0.002 * alpha;
-    // Repulsion from other nodes
+    // Gravity toward center
+    n.vx += (cx - n.x) * 0.001 * alpha;
+    n.vy += (cy - n.y) * 0.001 * alpha;
+    // Repulsion
     for (const m of nodes) {
       if (n === m) continue;
       const dx = n.x - m.x;
       const dy = n.y - m.y;
       const dist2 = dx * dx + dy * dy || 1;
-      const f = (4000 * alpha) / dist2;
+      const f = (3500 * alpha) / dist2;
       n.vx += dx * f;
       n.vy += dy * f;
     }
@@ -127,8 +135,8 @@ function tickSimulation(
       n.vx = 0;
       n.vy = 0;
     } else {
-      n.vx *= 0.88;
-      n.vy *= 0.88;
+      n.vx *= 0.85;
+      n.vy *= 0.85;
       n.x += n.vx;
       n.y += n.vy;
     }
@@ -142,12 +150,12 @@ function applyGeometry(
   cy: number,
 ) {
   if (mode === "flower") {
-    const rings = [1, 6, 5];
+    const ringDefs = [1, 6, 12];
     let i = 0;
-    for (const [ringIdx, count] of rings.entries()) {
+    for (const [ringIdx, count] of ringDefs.entries()) {
       const r = ringIdx * 130;
       for (let j = 0; j < count && i < nodes.length; j++, i++) {
-        const angle = (j / Math.max(1, count)) * Math.PI * 2;
+        const angle = (j / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
         nodes[i].fx = cx + r * Math.cos(angle);
         nodes[i].fy = cy + r * Math.sin(angle);
       }
@@ -159,17 +167,20 @@ function applyGeometry(
     }
   } else if (mode === "hex") {
     const cols = Math.ceil(Math.sqrt(nodes.length));
+    const totalRows = Math.ceil(nodes.length / cols);
+    const colSpacing = 100;
+    const rowSpacing = 88;
     for (const [i, node] of nodes.entries()) {
       const row = Math.floor(i / cols);
       const col = i % cols;
-      const offset = row % 2 === 0 ? 0 : 60;
-      node.fx = cx - (cols * 60) / 2 + col * 120 + offset;
-      node.fy = cy - (Math.ceil(nodes.length / cols) * 70) / 2 + row * 104;
+      const offset = row % 2 === 0 ? 0 : colSpacing / 2;
+      node.fx = cx - (cols * colSpacing) / 2 + col * colSpacing + offset;
+      node.fy = cy - (totalRows * rowSpacing) / 2 + row * rowSpacing;
     }
   } else if (mode === "spiral") {
     for (const [i, node] of nodes.entries()) {
       const angle = i * 0.8;
-      const r = i * 20;
+      const r = i * 22;
       node.fx = cx + r * Math.cos(angle);
       node.fy = cy + r * Math.sin(angle);
     }
@@ -183,18 +194,28 @@ function applyGeometry(
 
 export function GraphView({ onSelectItem }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [geometry, setGeometry] = useState<GeometryMode>("standard");
+  const geometryRef = useRef<GeometryMode>("standard");
+
   const hoveredIdRef = useRef<string | null>(null);
   const nodesRef = useRef<GraphNode[]>([]);
   const linksRef = useRef<GraphLink[]>([]);
   const transformRef = useRef({ x: 0, y: 0, k: 1 });
+  const sizeRef = useRef({ W: 0, H: 0 });
+  const frameRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const runningRef = useRef(false);
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0, tx: 0, ty: 0 });
   const dragNodeRef = useRef<GraphNode | null>(null);
-  const rafRef = useRef<number | null>(null);
-  const geometryRef = useRef<GeometryMode>("standard");
 
-  const getCanvasPos = useCallback(
+  // Keep geometry ref in sync
+  useEffect(() => {
+    geometryRef.current = geometry;
+  }, [geometry]);
+
+  const getWorldPos = useCallback(
     (e: MouseEvent, canvas: HTMLCanvasElement) => {
       const rect = canvas.getBoundingClientRect();
       const mx =
@@ -215,8 +236,8 @@ export function GraphView({ onSelectItem }: Props) {
       const dx = node.x - mx;
       const dy = node.y - my;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const r = NODE_RADII[node.type] ?? 8;
-      if (dist < r + 6 && dist < minDist) {
+      const r = (NODE_SIZES[node.type] ?? 7) + 5;
+      if (dist < r && dist < minDist) {
         minDist = dist;
         found = node;
       }
@@ -224,72 +245,131 @@ export function GraphView({ onSelectItem }: Props) {
     return found;
   }, []);
 
+  const startLoop = useCallback(
+    (ctx: CanvasRenderingContext2D, _canvas: HTMLCanvasElement) => {
+      if (runningRef.current) return;
+      runningRef.current = true;
+
+      function draw() {
+        const { W, H } = sizeRef.current;
+        if (W === 0 || H === 0) return;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.save();
+        const { x, y, k } = transformRef.current;
+        ctx.translate(x, y);
+        ctx.scale(k, k);
+
+        // Draw links
+        ctx.strokeStyle = "#ccc";
+        ctx.lineWidth = 1 / k;
+        const nodeMap = new Map(nodesRef.current.map((n) => [n.id, n]));
+        for (const link of linksRef.current) {
+          const s = nodeMap.get(link.source);
+          const t = nodeMap.get(link.target);
+          if (!s || !t) continue;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(t.x, t.y);
+          ctx.stroke();
+        }
+
+        // Draw nodes
+        for (const node of nodesRef.current) {
+          const r = NODE_SIZES[node.type] ?? 7;
+          const isHov = node.id === hoveredIdRef.current;
+          ctx.fillStyle = isHov ? "#fff" : (NODE_COLORS[node.type] ?? "#000");
+          ctx.strokeStyle = "#000";
+          ctx.lineWidth = isHov ? 2 / k : 1 / k;
+          ctx.beginPath();
+          ctx.rect(node.x - r, node.y - r, r * 2, r * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          const label =
+            node.label.length > 16
+              ? `${node.label.substring(0, 15)}…`
+              : node.label;
+          ctx.fillStyle = "#000";
+          ctx.font = `${isHov ? "bold " : ""}${10 / k}px 'Space Mono', monospace`;
+          ctx.textAlign = "center";
+          ctx.fillText(label, node.x, node.y + r + 12 / k);
+        }
+
+        ctx.restore();
+      }
+
+      function loop() {
+        const { W, H } = sizeRef.current;
+        if (W > 0 && H > 0) {
+          const shouldSimulate =
+            frameRef.current < 350 || dragNodeRef.current !== null;
+          if (shouldSimulate) {
+            tickSimulation(nodesRef.current, linksRef.current, W, H);
+            frameRef.current++;
+          }
+          draw();
+        }
+        rafRef.current = requestAnimationFrame(loop);
+      }
+
+      rafRef.current = requestAnimationFrame(loop);
+      return () => {
+        runningRef.current = false;
+        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      };
+    },
+    [],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const W = canvas.offsetWidth;
-    const H = canvas.offsetHeight;
-    canvas.width = W;
-    canvas.height = H;
+    let stopLoop: (() => void) | undefined;
 
-    const { nodes, links } = buildGraph(W, H);
-    nodesRef.current = nodes;
-    linksRef.current = links;
+    function initSize(W: number, H: number) {
+      if (!canvas) return;
+      canvas.width = W;
+      canvas.height = H;
+      sizeRef.current = { W, H };
 
-    function draw() {
-      if (!ctx || !canvas) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.save();
-      ctx.translate(transformRef.current.x, transformRef.current.y);
-      ctx.scale(transformRef.current.k, transformRef.current.k);
-
-      ctx.strokeStyle = "#ddd";
-      ctx.lineWidth = 1;
-      const nodeMap = new Map(nodesRef.current.map((n) => [n.id, n]));
-      for (const link of linksRef.current) {
-        const s = nodeMap.get(link.source);
-        const t = nodeMap.get(link.target);
-        if (!s || !t) continue;
-        ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(t.x, t.y);
-        ctx.stroke();
+      if (nodesRef.current.length === 0) {
+        const { nodes, links } = buildGraph(W, H);
+        nodesRef.current = nodes;
+        linksRef.current = links;
+        frameRef.current = 0;
       }
 
-      for (const node of nodesRef.current) {
-        const r = NODE_RADII[node.type] ?? 8;
-        const isHov = node.id === hoveredIdRef.current;
-        ctx.beginPath();
-        ctx.rect(node.x - r, node.y - r, r * 2, r * 2);
-        ctx.fillStyle = isHov ? "#fff" : (NODE_COLORS[node.type] ?? "#000");
-        ctx.fill();
-        ctx.strokeStyle = "#000";
-        ctx.lineWidth = isHov ? 2 : 1;
-        ctx.stroke();
+      // Center transform
+      transformRef.current = { x: 0, y: 0, k: 1 };
 
-        ctx.fillStyle = "#000";
-        ctx.font = `${isHov ? "bold " : ""}10px Arial, sans-serif`;
-        ctx.textAlign = "center";
-        ctx.fillText(node.label.substring(0, 16), node.x, node.y + r + 12);
+      if (!stopLoop) {
+        stopLoop = startLoop(ctx!, canvas!);
       }
-
-      ctx.restore();
     }
 
-    let frame = 0;
-    function loop() {
-      frame++;
-      if (frame < 300 || dragNodeRef.current) {
-        tickSimulation(nodesRef.current, linksRef.current, W, H);
-      }
-      draw();
-      rafRef.current = requestAnimationFrame(loop);
+    // Try immediate sizing
+    const rect = container.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      initSize(Math.floor(rect.width), Math.floor(rect.height));
     }
-    rafRef.current = requestAnimationFrame(loop);
 
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          initSize(Math.floor(width), Math.floor(height));
+        }
+      }
+    });
+    ro.observe(container);
+
+    // Event handlers
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 0.9;
@@ -297,10 +377,11 @@ export function GraphView({ onSelectItem }: Props) {
         0.2,
         Math.min(5, transformRef.current.k * factor),
       );
+      frameRef.current = Math.min(frameRef.current, 350); // keep drawing
     };
 
     const onMouseDown = (e: MouseEvent) => {
-      const { mx, my } = getCanvasPos(e, canvas);
+      const { mx, my } = getWorldPos(e, canvas!);
       const node = findNode(mx, my);
       if (node) {
         dragNodeRef.current = node;
@@ -318,11 +399,11 @@ export function GraphView({ onSelectItem }: Props) {
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      const { mx, my } = getCanvasPos(e, canvas);
       if (dragNodeRef.current) {
+        const { mx, my } = getWorldPos(e, canvas!);
         dragNodeRef.current.fx = mx;
         dragNodeRef.current.fy = my;
-        frame = 0;
+        frameRef.current = 0;
         return;
       }
       if (isDraggingRef.current) {
@@ -330,20 +411,34 @@ export function GraphView({ onSelectItem }: Props) {
           dragStartRef.current.tx + (e.clientX - dragStartRef.current.x);
         transformRef.current.y =
           dragStartRef.current.ty + (e.clientY - dragStartRef.current.y);
+        frameRef.current = Math.min(frameRef.current, 350);
         return;
       }
+      const { mx, my } = getWorldPos(e, canvas!);
       const hovered = findNode(mx, my);
       const newId = hovered?.id ?? null;
       if (newId !== hoveredIdRef.current) {
         hoveredIdRef.current = newId;
-        canvas.style.cursor = hovered ? "pointer" : "default";
+        canvas!.style.cursor = hovered ? "pointer" : "default";
+        frameRef.current = Math.min(frameRef.current, 350);
       }
     };
 
     const onMouseUp = (e: MouseEvent) => {
       if (dragNodeRef.current) {
-        dragNodeRef.current.fx = null;
-        dragNodeRef.current.fy = null;
+        const moved =
+          dragNodeRef.current.fx !== null &&
+          Math.abs(dragNodeRef.current.fx - dragNodeRef.current.x) < 4 &&
+          Math.abs(dragNodeRef.current.fy! - dragNodeRef.current.y) < 4;
+        if (moved) {
+          const item = ALL_ITEMS.find((i) => i.id === dragNodeRef.current!.id);
+          if (item) onSelectItem(item);
+        }
+        // Release fix
+        if (geometryRef.current === "standard") {
+          dragNodeRef.current.fx = null;
+          dragNodeRef.current.fy = null;
+        }
         dragNodeRef.current = null;
         return;
       }
@@ -351,7 +446,7 @@ export function GraphView({ onSelectItem }: Props) {
         isDraggingRef.current = false;
         return;
       }
-      const { mx, my } = getCanvasPos(e, canvas);
+      const { mx, my } = getWorldPos(e, canvas!);
       const node = findNode(mx, my);
       if (node) {
         const item = ALL_ITEMS.find((i) => i.id === node.id);
@@ -359,27 +454,40 @@ export function GraphView({ onSelectItem }: Props) {
       }
     };
 
+    const onMouseLeave = () => {
+      isDraggingRef.current = false;
+      if (dragNodeRef.current && geometryRef.current === "standard") {
+        dragNodeRef.current.fx = null;
+        dragNodeRef.current.fy = null;
+      }
+      dragNodeRef.current = null;
+    };
+
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("mousedown", onMouseDown);
     canvas.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("mouseup", onMouseUp);
+    canvas.addEventListener("mouseleave", onMouseLeave);
 
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      ro.disconnect();
+      if (stopLoop) stopLoop();
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      runningRef.current = false;
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("mousedown", onMouseDown);
       canvas.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("mouseup", onMouseUp);
+      canvas.removeEventListener("mouseleave", onMouseLeave);
     };
-  }, [getCanvasPos, findNode, onSelectItem]);
+  }, [getWorldPos, findNode, onSelectItem, startLoop]);
 
+  // Apply geometry when mode changes
   useEffect(() => {
-    geometryRef.current = geometry;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const W = canvas.offsetWidth;
-    const H = canvas.offsetHeight;
+    const { W, H } = sizeRef.current;
+    if (nodesRef.current.length === 0) return;
     applyGeometry(nodesRef.current, geometry, W / 2, H / 2);
+    frameRef.current = 0; // restart simulation ticks so geometry gets drawn
   }, [geometry]);
 
   const geomOptions: { key: GeometryMode; label: string }[] = [
@@ -405,86 +513,99 @@ export function GraphView({ onSelectItem }: Props) {
         overflow: "hidden",
       }}
     >
+      {/* Toolbar */}
       <div
         style={{
-          padding: "16px 24px",
-          borderBottom: "1px solid black",
+          padding: "12px 20px",
+          borderBottom: "1px solid #000",
           display: "flex",
           alignItems: "center",
-          gap: "24px",
+          gap: "20px",
           flexWrap: "wrap",
+          background: "#fff",
+          flexShrink: 0,
         }}
       >
         <span
           style={{
-            fontFamily: "'Playfair Display', Georgia, serif",
-            fontWeight: 900,
-            fontSize: "16px",
+            fontFamily: "'Space Mono', monospace",
+            fontWeight: 700,
+            fontSize: "13px",
             textTransform: "uppercase",
-            letterSpacing: "0.05em",
+            letterSpacing: "0.1em",
           }}
         >
           Graph View
         </span>
 
-        <div style={{ display: "flex", gap: "0", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
           <span
             style={{
               fontSize: "10px",
               textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              color: "#666",
+              letterSpacing: "0.08em",
+              color: "#888",
               marginRight: "8px",
-              fontWeight: 600,
+              fontFamily: "'Space Mono', monospace",
             }}
           >
-            Geometry:
+            Geometry
           </span>
-          {geomOptions.map((opt) => (
+          {geomOptions.map((opt, i) => (
             <button
               type="button"
               key={opt.key}
               data-ocid="geometry.toggle"
               onClick={() => setGeometry(opt.key)}
               style={{
-                padding: "4px 12px",
-                fontSize: "11px",
+                padding: "5px 10px",
+                fontSize: "10px",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
-                fontWeight: 600,
+                fontWeight: 700,
+                fontFamily: "'Space Mono', monospace",
                 background: geometry === opt.key ? "#000" : "#fff",
                 color: geometry === opt.key ? "#fff" : "#000",
-                border: "1px solid black",
-                borderRight: "none",
+                border: "1px solid #000",
+                borderLeft: i === 0 ? "1px solid #000" : "none",
                 cursor: "pointer",
+                whiteSpace: "nowrap",
               }}
             >
               {opt.label}
             </button>
           ))}
-          <div style={{ width: "1px", height: "28px", background: "#000" }} />
         </div>
 
-        <div style={{ display: "flex", gap: "16px", marginLeft: "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "14px",
+            marginLeft: "auto",
+            flexWrap: "wrap",
+          }}
+        >
           {legend.map((l) => (
             <div
               key={l.type}
-              style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              style={{ display: "flex", alignItems: "center", gap: "5px" }}
             >
               <div
                 style={{
-                  width: "12px",
-                  height: "12px",
+                  width: "11px",
+                  height: "11px",
                   background: NODE_COLORS[l.type],
-                  border: "1px solid black",
+                  border: "1px solid #000",
+                  flexShrink: 0,
                 }}
               />
               <span
                 style={{
-                  fontSize: "11px",
+                  fontSize: "10px",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
                   color: "#666",
+                  fontFamily: "'Space Mono', monospace",
                 }}
               >
                 {l.label}
@@ -494,27 +615,32 @@ export function GraphView({ onSelectItem }: Props) {
         </div>
       </div>
 
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      {/* Canvas container */}
+      <div
+        ref={containerRef}
+        style={{
+          flex: 1,
+          position: "relative",
+          overflow: "hidden",
+          background: "#fff",
+        }}
+      >
         <canvas
           ref={canvasRef}
           data-ocid="graph.canvas_target"
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-            background: "#fff",
-          }}
+          style={{ display: "block", width: "100%", height: "100%" }}
         />
         <div
           style={{
             position: "absolute",
-            bottom: "16px",
-            left: "16px",
-            fontSize: "10px",
+            bottom: "14px",
+            left: "14px",
+            fontSize: "9px",
             color: "#aaa",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
             pointerEvents: "none",
+            fontFamily: "'Space Mono', monospace",
           }}
         >
           Scroll to zoom · Drag to pan · Click node to view

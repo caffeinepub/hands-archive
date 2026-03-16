@@ -120,37 +120,6 @@ export function Sidebar({ currentView, onNavigate }: SidebarProps) {
         );
       })}
       <div style={{ flex: 1 }} />
-      <div style={{ padding: "0 24px 16px" }}>
-        <a
-          href="https://excited-aquamarine-ria-draft.caffeine.xyz"
-          target="_blank"
-          rel="noopener noreferrer"
-          data-ocid="nav.main_home.link"
-          style={{
-            display: "block",
-            padding: "8px 0",
-            fontSize: "12px",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-            color: "#000",
-            textDecoration: "none",
-            border: "2px solid black",
-            textAlign: "center",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background = "#000";
-            (e.currentTarget as HTMLAnchorElement).style.color = "#fff";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.background =
-              "transparent";
-            (e.currentTarget as HTMLAnchorElement).style.color = "#000";
-          }}
-        >
-          Main Home
-        </a>
-      </div>
       <div
         style={{
           padding: "16px 24px 24px",
